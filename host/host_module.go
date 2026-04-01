@@ -19,12 +19,12 @@ var (
 )
 
 type meta struct {
-	ptrID      uint32
-	ptrSetID   uint32
+	ptrBuf     uint32
 	ptrBufCap  uint32
 	ptrBufLen  uint32
-	ptrBuf     uint32
 	ptrErrCode uint32
+	ptrID      uint32
+	ptrSetID   uint32
 }
 
 type hostModule struct {
@@ -50,9 +50,9 @@ func (h *hostModule) Name() string {
 func (h *hostModule) ContextCopy(dst, src context.Context) context.Context {
 	dst = context.WithValue(dst, ctxKeyMeta, get[*meta](src, ctxKeyMeta))
 	if v := src.Value(ctxKeyPool); v != nil {
-		dst = context.WithValue(dst, ctxKeyPool, v.(map[uint64]map[string][]byte))
+		dst = context.WithValue(dst, ctxKeyPool, v.(map[uint64]map[uint64][]byte))
 	} else {
-		dst = context.WithValue(dst, ctxKeyPool, make(map[uint64]map[string][]byte))
+		dst = context.WithValue(dst, ctxKeyPool, make(map[uint64]map[uint64][]byte))
 	}
 	return dst
 }
@@ -120,7 +120,7 @@ func (h *hostModule) Register(ctx context.Context, r wazero.Runtime) (err error)
 
 // InitContext retrieves the meta page from the wasm module
 func (h *hostModule) InitContext(ctx context.Context, m api.Module) (context.Context, error) {
-	stack, err := m.ExportedFunction(`__small_cache`).Call(ctx)
+	stack, err := m.ExportedFunction(`__buffer_pool`).Call(ctx)
 	if err != nil {
 		return ctx, err
 	}
@@ -160,8 +160,11 @@ func getID(mod api.Module, meta *meta) uint64 {
 }
 
 func getBuf(mod api.Module, meta *meta) []byte {
-	b := read(mod, meta.ptrBuf, meta.ptrBufLen, meta.ptrBufCap)
-	return append([]byte(nil), b...)
+	return read(mod, meta.ptrBuf, meta.ptrBufLen, meta.ptrBufCap)
+}
+
+func getBufCopy(mod api.Module, meta *meta) []byte {
+	return append([]byte(nil), getBuf(mod, meta)...)
 }
 
 func buf(m api.Module, meta *meta) []byte {

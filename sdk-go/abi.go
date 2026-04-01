@@ -7,7 +7,7 @@ import (
 var (
 	id      uint64
 	setID   uint64
-	bufCap  uint32 = 2 << 20
+	bufCap  uint32 = 1536 << 10 // 1.5 MiB
 	bufLen  uint32
 	buf     = make([]byte, bufCap)
 	errCode uint32

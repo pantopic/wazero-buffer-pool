@@ -19,12 +19,12 @@ var (
 )
 
 type meta struct {
-	ptrBuf     uint32
-	ptrBufCap  uint32
-	ptrBufLen  uint32
-	ptrErrCode uint32
 	ptrID      uint32
 	ptrSetID   uint32
+	ptrBufCap  uint32
+	ptrBufLen  uint32
+	ptrBuf     uint32
+	ptrErrCode uint32
 }
 
 type hostModule struct {

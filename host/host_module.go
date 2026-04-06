@@ -14,8 +14,9 @@ import (
 const Name = "pantopic/wazero-buffer-pool"
 
 var (
-	ctxKeyMeta = Name + `/meta`
-	ctxKeyPool = Name + `/pool`
+	ctxKeyMeta   = Name + `/meta`
+	ctxKeyPool   = Name + `/pool`
+	ctxKeyBufCap = Name + `/buf-cap`
 )
 
 type meta struct {
@@ -49,6 +50,7 @@ func (h *hostModule) Name() string {
 
 func (h *hostModule) ContextCopy(dst, src context.Context) context.Context {
 	dst = context.WithValue(dst, ctxKeyMeta, get[*meta](src, ctxKeyMeta))
+	dst = context.WithValue(dst, ctxKeyBufCap, get[uint32](src, ctxKeyBufCap))
 	if v := src.Value(ctxKeyPool); v != nil {
 		dst = context.WithValue(dst, ctxKeyPool, v.(map[uint64]map[uint64][]byte))
 	} else {
@@ -68,18 +70,6 @@ func (h *hostModule) Register(ctx context.Context, r wazero.Runtime) (err error)
 		builder = builder.NewFunctionBuilder().WithGoModuleFunction(api.GoModuleFunc(fn), nil, nil).Export(name)
 	}
 	for name, fn := range map[string]any{
-		"__buffer_pool_multi_append": func(m map[uint64][]byte, id uint64, v []byte) bool {
-			if _, ok := m[id]; !ok {
-				m[id] = []byte{}
-			}
-			n := binary.PutUvarint(scratch, uint64(len(v)))
-			if len(m[id])+len(v)+n > cap(v) {
-				return false
-			}
-			m[id] = append(m[id], scratch[:n]...)
-			m[id] = append(m[id], v...)
-			return true
-		},
 		"__buffer_pool_multi_load": func(m map[uint64][]byte, id uint64) []byte {
 			return m[id]
 		},
@@ -114,6 +104,27 @@ func (h *hostModule) Register(ctx context.Context, r wazero.Runtime) (err error)
 			log.Panicf("Method signature implementation missing: %#v", fn)
 		}
 	}
+	builder = builder.NewFunctionBuilder().WithGoModuleFunction(api.GoModuleFunc(func(ctx context.Context, mod api.Module, stack []uint64) {
+		bufcap := get[uint32](ctx, ctxKeyBufCap)
+		fn := func(m map[uint64][]byte, id uint64, v []byte) bool {
+			if _, ok := m[id]; !ok {
+				m[id] = []byte{}
+			}
+			n := binary.PutUvarint(scratch, uint64(len(v)))
+			if len(m[id])+len(v)+n > int(bufcap) {
+				return false
+			}
+			m[id] = append(m[id], scratch[:n]...)
+			m[id] = append(m[id], v...)
+			return true
+		}
+		meta := get[*meta](ctx, ctxKeyMeta)
+		errCode := uint32(0)
+		if !fn(h.getMap(ctx, mod, meta), getID(mod, meta), getData(mod, api.DecodeU32(stack[0]), api.DecodeU32(stack[1]))) {
+			errCode = 1
+		}
+		writeUint32(mod, meta.ptrErrCode, errCode)
+	}), []api.ValueType{api.ValueTypeI32, api.ValueTypeI32}, nil).Export("__buffer_pool_multi_append")
 	h.module, err = builder.Instantiate(ctx)
 	return
 }
@@ -136,6 +147,7 @@ func (h *hostModule) InitContext(ctx context.Context, m api.Module) (context.Con
 	} {
 		*v = readUint32(m, ptr+uint32(4*i))
 	}
+	ctx = context.WithValue(ctx, ctxKeyBufCap, readUint32(m, meta.ptrBufCap))
 	return context.WithValue(ctx, ctxKeyMeta, meta), nil
 }
 
@@ -161,6 +173,14 @@ func getID(mod api.Module, meta *meta) uint64 {
 
 func getBuf(mod api.Module, meta *meta) []byte {
 	return read(mod, meta.ptrBuf, meta.ptrBufLen, meta.ptrBufCap)
+}
+
+func getData(mod api.Module, ptrBuf uint32, bufLen uint32) []byte {
+	buf, ok := mod.Memory().Read(ptrBuf, bufLen)
+	if !ok {
+		log.Panicf("Memory.Read(%d, %d) out of range", ptrBuf, bufLen)
+	}
+	return buf
 }
 
 func getBufCopy(mod api.Module, meta *meta) []byte {

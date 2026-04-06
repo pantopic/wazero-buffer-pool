@@ -31,7 +31,7 @@ func __buffer_pool() (res uint32) {
 
 //go:wasm-module pantopic/wazero-buffer-pool
 //export __buffer_pool_multi_append
-func _multi_append()
+func _multi_append(uint32, uint32)
 
 //go:wasm-module pantopic/wazero-buffer-pool
 //export __buffer_pool_multi_load

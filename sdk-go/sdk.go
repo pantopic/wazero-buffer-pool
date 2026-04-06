@@ -3,6 +3,7 @@ package buffer_pool
 import (
 	"encoding/binary"
 	"iter"
+	"unsafe"
 )
 
 type MultiValueSet struct {
@@ -35,9 +36,7 @@ type MultiValue struct {
 func (c MultiValue) Append(b []byte) bool {
 	id = c.id
 	setID = c.setID
-	copy(buf[:len(b)], b)
-	bufLen = uint32(len(b))
-	_multi_append()
+	_multi_append(uint32(uintptr(unsafe.Pointer(&b[0]))), uint32(len(b)))
 	return errCode == 0
 }
 

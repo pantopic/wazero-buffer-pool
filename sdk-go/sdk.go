@@ -7,12 +7,12 @@ import (
 )
 
 type MultiValueSet struct {
-	id   uint64
-	size uint64
+	setID uint64
+	size  uint64
 }
 
 func NewMultiValueSet(id uint64, opts ...Option) MultiValueSet {
-	p := MultiValueSet{id: id}
+	p := MultiValueSet{setID: id}
 	for _, opt := range opts {
 		opt(&p)
 	}
@@ -22,7 +22,7 @@ func NewMultiValueSet(id uint64, opts ...Option) MultiValueSet {
 func (s *MultiValueSet) Find(id uint64) MultiValue {
 	return MultiValue{
 		id:    id,
-		setID: s.id,
+		setID: s.setID,
 		size:  s.size,
 	}
 }
@@ -57,7 +57,7 @@ func (c MultiValue) Iter() iter.Seq[[]byte] {
 }
 
 func (c MultiValue) Reset() {
-	id = c.id
 	setID = c.setID
+	id = c.id
 	_multi_reset()
 }
